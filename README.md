@@ -1,5 +1,5 @@
-[![C/I](https://github.com/aws-observability/aws-otel-collector/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/aws-observability/aws-otel-collector/actions/workflows/CI.yml)
-![GitHub release (latest by date)](https://img.shields.io/github/v/release/aws-observability/aws-otel-collector)
+[![C/I](https://github.com/AbhishekKantharia/aws-otel-collector/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/AbhishekKantharia/AWS-Otel-Collector-Clone/actions/workflows/CI.yml)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/AbhishekKantharia/AWS-Otel-Collector-Clone)
 
 
 
@@ -13,9 +13,8 @@ See the [AWS Distro for OpenTelemetry documentation](https://aws-otel.github.io/
 
 Use the community resources below for getting help with the ADOT Collector.
 * Open a support ticket with [AWS Support](http://docs.aws.amazon.com/awssupport/latest/user/getting-started.html).
-* Use [GitHub issues](https://github.com/aws-observability/aws-otel-collector/issues) to report bugs and request features.
-* Join our GitHub [Community](https://github.com/aws-observability/aws-otel-community) for AWS Distro for OpenTelemetry to ask your questions, file issues, or request enhancements.
-* If you think you may have found a bug, open a [bug report](https://github.com/aws-observability/aws-otel-collector/issues/new?template=bug_report.md).
+* Use [GitHub issues](https://github.com/AbhishekKantharia/AWS-Otel-Collector-Clone/issues) to report bugs and request features.
+* If you think you may have found a bug, open a [bug report](https://github.com/AbhishekKantharia/AWS-Otel-Collector-Clone/new?template=bug_report.md).
 * For contributing guidelines, refer to [CONTRIBUTING.md](CONTRIBUTING.md).
 
 #### ADOT Collector Built-in Components
@@ -58,7 +57,7 @@ To build the ADOT Collector locally, you will need to have Golang installed. You
 
 #### ADOT Collector Configuration
 
-The ADOT Collector is built with a [default configuration](https://github.com/aws-observability/aws-otel-collector/blob/main/config.yaml).
+The ADOT Collector is built with a [default configuration](https://github.com/AbhishekKantharia/AWS-Otel-Collector-Clone/blob/main/config.yaml).
 The ADOT Collector configuration uses the same configuration syntax/design from [OpenTelemetry Collector](https://github.com/open-telemetry/opentelemetry-collector). For more information regarding OpenTelemetry Collector configuration please refer to the [upstream documentation](https://opentelemetry.io/docs/collector/configuration/). 
 so you can customize or port your OpenTelemetry Collector configuration files when running ADOT Collector. Please refer to the `Try out ADOT Collector` section on configuring ADOT Collector.
 
