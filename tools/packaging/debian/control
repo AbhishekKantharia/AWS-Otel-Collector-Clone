@@ -1,0 +1,5 @@
+Section: admin
+Depends: libc6
+Priority: optional
+Maintainer: Amazon.com, Inc.
+Description: AWS Distro for OpenTelemetry Collector

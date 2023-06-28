@@ -1,0 +1,220 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  ClusterName:
+    Type: String
+    Description: Enter the name of your ECS cluster from which you want to collect metrics
+  CreateIAMRoles:
+    Type: String
+    Default: 'False'
+    AllowedValues:
+      - 'True'
+      - 'False'
+    Description: Whether to create default IAM roles
+    ConstraintDescription: must specify True or False.
+  TaskRoleArn:
+    Type: String
+    Default: Default
+    Description: Enter the role arn you want to use as the ecs task role
+  ExecutionRoleArn:
+    Type: String
+    Default: Default
+    Description: Enter the role arn you want to use as the ecs execution role
+  command:
+    Type: String
+    Description: Using the right command to choose the config file you want to config your AOC
+    Default: Default
+Conditions:
+  CreateRoles: !Equals
+    - !Ref CreateIAMRoles
+    - 'True'
+  DefaultTaskRole: !Equals
+    - !Ref TaskRoleArn
+    - Default
+  DefaultExecutionRole: !Equals
+    - !Ref ExecutionRoleArn
+    - Default
+Resources:
+  ECSTaskDefinition:
+    Type: 'AWS::ECS::TaskDefinition'
+    Properties:
+      Family: ecs-aws-otel-sidecar-service
+      TaskRoleArn: !If
+        - CreateRoles
+        - !GetAtt
+          - ECSTaskRole
+          - Arn
+        - !If
+          - DefaultTaskRole
+          - !Sub 'arn:aws:iam::${AWS::AccountId}:role/AWSOTelRole'
+          - !Ref TaskRoleArn
+      ExecutionRoleArn: !If
+        - CreateRoles
+        - !GetAtt
+          - ECSExecutionRole
+          - Arn
+        - !If
+          - DefaultExecutionRole
+          - !Sub 'arn:aws:iam::${AWS::AccountId}:role/AWSOTelExecutionRole'
+          - !Ref ExecutionRoleArn
+      NetworkMode: bridge
+      ContainerDefinitions:
+        - Name: aws-collector
+          Image: 'public.ecr.aws/aws-observability/aws-otel-collector:latest'
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-create-group: 'True'
+              awslogs-group: /ecs/aws-collector
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: ecs
+          Command: [!Ref command]
+          HealthCheck:
+            Command:
+              - "/healthcheck"
+            Interval: 5
+            Retries: 2
+            Timeout: 3
+        - Name: aws-xray-data-emitter
+          Image: 'public.ecr.aws/aws-otel-test/aws-otel-goxray-sample-app:latest'
+          Essential: false
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-create-group: 'True'
+              awslogs-group: /ecs/aws-xray-data-emitter
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: ecs
+          PortMappings:
+            - HostPort: 5000
+              Protocol: tcp
+              ContainerPort: 5000
+          Environment:
+            - Name: AWS_XRAY_DAEMON_ADDRESS
+              Value: 'aws-collector:2000'
+            - Name: LISTEN_ADDRESS
+              Value: '0.0.0.0:5000'
+          DependsOn:
+            - ContainerName: aws-collector
+              Condition: START
+          Links:
+            - aws-collector
+        - Name: nginx
+          Image: 'public.ecr.aws/nginx/nginx:latest'
+          Essential: false
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-create-group: 'True'
+              awslogs-group: /ecs/nginx
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: ecs
+          DependsOn:
+            - ContainerName: aws-collector
+              Condition: START
+        - Name: aoc-statsd-emitter
+          Image: 'alpine/socat:latest'
+          Essential: false
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-create-group: 'True'
+              awslogs-group: /ecs/statsd-emitter
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: ecs
+          DependsOn:
+            - ContainerName: aws-collector
+              Condition: START
+          EntryPoint:
+            - "/bin/sh"
+            - "-c"
+            - "while true; do echo 'statsdTestMetric:1|c' | socat -v -t 0 - UDP:aws-collector:8125; sleep 1; done"
+          Links:
+            - aws-collector
+        - Name: traffic-generator-xray
+          Image: 'curlimages/curl:latest'
+          Essential: false
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-create-group: 'True'
+              awslogs-group: /ecs/traffic-generator-xray
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: ecs
+          DependsOn:
+            - ContainerName: aws-xray-data-emitter
+              Condition: START
+          EntryPoint:
+            - "/bin/sh"
+            - "-c"
+            - "while :; do curl http://aws-xray-data-emitter:5000/outgoing-http-call > /dev/null 2>&1; sleep 10s; curl http://aws-xray-data-emitter:5000/aws-sdk-call > /dev/null 2>&1; sleep 10s; done"
+          Links:
+            - aws-xray-data-emitter
+      RequiresCompatibilities:
+        - EC2
+      Cpu: '1024'
+      Memory: '2048'
+  ECSReplicaService:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      TaskDefinition: !Ref ECSTaskDefinition
+      Cluster: !Ref ClusterName
+      LaunchType: EC2
+      SchedulingStrategy: REPLICA
+      DesiredCount: 1
+      ServiceName: aws-otel-sidecar-service
+  ECSTaskRole:
+    Type: 'AWS::IAM::Role'
+    Condition: CreateRoles
+    Properties:
+      Description: Allows ECS tasks to call AWS services on your behalf.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: AWSOpenTelemetryPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:PutLogEvents'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:DescribeLogStreams'
+                  - 'logs:DescribeLogGroups'
+                  - 'xray:PutTraceSegments'
+                  - 'xray:PutTelemetryRecords'
+                  - 'xray:GetSamplingRules'
+                  - 'xray:GetSamplingTargets'
+                  - 'xray:GetSamplingStatisticSummaries'
+                  - 'ssm:GetParameters'
+                  - 's3:Get*'
+                  - 's3:List*'
+                Resource: '*'
+      RoleName: AWSOTelRole
+  ECSExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Condition: CreateRoles
+    Properties:
+      Description: >-
+        Allows ECS container agent makes calls to the Amazon ECS API on your
+        behalf.
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+        - 'arn:aws:iam::aws:policy/CloudWatchLogsFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
+      RoleName: AWSOTelExecutionRole
