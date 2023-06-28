@@ -1,0 +1,20 @@
+#IDE
+.idea
+
+#build folder
+build/
+bin/
+
+#resports
+coverage.txt
+
+# swp file
+*.swp
+
+# python libs
+venv/
+
+.DS_Store
+
+# Created by the testbed
+testbed/**/results
